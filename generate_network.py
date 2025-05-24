@@ -7,7 +7,7 @@ model = KeyedVectors.load_word2vec_format("model.vec", binary=False)
 with open("vocabulary.txt", "r", encoding="utf-8") as f:
     words = [line.strip() for line in f if line.strip()]
 
-def get_related_words(word, topn=200):
+def get_related_words(word, topn=80):
     try:
         results = model.most_similar(positive=[word], topn=topn)
         return {w: float(sim) for w, sim in results}
