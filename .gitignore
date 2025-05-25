@@ -1,3 +1,11 @@
 model.vec
 *.env
 ".env"
+/logs/
+*.log
+/Runnable/
+*.vec
+/GUIAPP/YunaLauncher/.vs/
+/GUIAPP/YunaLauncher/bin/
+/GUIAPP/YunaLauncher/obj/
+/GUIAPP/YunaLauncher/.vs/

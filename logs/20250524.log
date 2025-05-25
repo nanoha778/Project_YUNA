@@ -1,6 +1,0 @@
-2025-05-24 23:58:52,565 [INFO] ChatGPTに 20 個の文章を生成依頼
-2025-05-24 23:59:03,434 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-24 23:59:03,442 [INFO] ChatGPTに 20 個の文章を生成依頼
-2025-05-24 23:59:15,259 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-24 23:59:15,261 [INFO] ChatGPTに 20 個の文章を生成依頼
-2025-05-24 23:59:26,756 [INFO] 手動停止されました。処理を終了します。
