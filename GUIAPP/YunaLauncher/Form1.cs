@@ -36,7 +36,7 @@ namespace YunaLauncher
             richTextBox2.Font = new Font("Segoe UI Emoji", 10);
 
 
-            richTextBox1.AppendText("読込中...");
+            AppendLog(richTextBox1, "読込中...");
             StartLoopHost();    // 自動ループ用 command_host.py 起動
             button2.Text = "🔴 自動実行 OFF";
             button2.BackColor = Color.LightGray;
@@ -82,7 +82,7 @@ namespace YunaLauncher
 
                     if (!string.IsNullOrWhiteSpace(input))
                     {
-                        richTextBox1.AppendText("\n");
+                        AppendLog(richTextBox1, "\n");
                         SendTalkCommand(input);
                     }
                 }
@@ -97,19 +97,19 @@ namespace YunaLauncher
             {
                 button2.Text = "🟢 自動実行 ON";
                 button2.BackColor = Color.LightGreen;
-                richTextBox2.AppendText("✅ 自動 /once 実行が有効になりました\n");
+                AppendLog(richTextBox2, "✅ 自動 /once 実行が有効になりました\n");
                 if (pythonLoopProcess != null && !pythonLoopProcess.HasExited)
                 {
                     pythonLoopProcess.StandardInput.WriteLine("/once");
                     pythonLoopProcess.StandardInput.Flush();
-                    richTextBox2.AppendText("▶ トグルON → /once 初回実行\n");
+                    AppendLog(richTextBox2, "▶ トグルON → /once 初回実行\n");
                 }
             }
             else
             {
                 button2.Text = "🔴 自動実行 OFF";
                 button2.BackColor = Color.LightGray;
-                richTextBox2.AppendText("🛑 自動 /once 実行が無効になりました\n");
+                AppendLog(richTextBox2, "🛑 自動 /once 実行が無効になりました\n");
             }
         }
 
@@ -152,11 +152,11 @@ namespace YunaLauncher
                     string line = pythonProcess.StandardOutput.ReadLine();
 
                     // 特定の文言を検出！
-                    if (line.Contains("コマンド (/talk テキスト or /once or /exit):"))
+                    if (line.Contains("コマンド (/talk"))
                     {
                         Invoke((MethodInvoker)(() =>
                         {
-                            richTextBox1.AppendText("✅ Python準備完了！" + Environment.NewLine);
+                            AppendLog(richTextBox1, "✅ Python準備完了！" + Environment.NewLine);
                             panel1.Hide();
                             // ロード画面OFF
                         }));
@@ -166,27 +166,9 @@ namespace YunaLauncher
                         // ログ出力など
                         Invoke((MethodInvoker)(() =>
                         {
-                            richTextBox1.AppendText(line + Environment.NewLine);
+                            AppendLog(richTextBox1, line + Environment.NewLine);
                         }));
                     }
-                }
-            });
-            Task.Run(() =>
-            {
-                while (!pythonProcess.StandardOutput.EndOfStream)
-                {
-                    string line = pythonProcess.StandardOutput.ReadLine();
-
-                    Invoke((MethodInvoker)(() =>
-                    {
-                        AppendLog(richTextBox1, line, isError: false);
-
-                        if (line.Contains("コマンド (/talk テキスト or /once or /exit):"))
-                        {
-                            richTextBox1.AppendText("✅ Python準備完了！" + Environment.NewLine);
-                            panel1.Hide();
-                        }
-                    }));
                 }
             });
 
@@ -236,55 +218,26 @@ namespace YunaLauncher
 
             pythonLoopProcess = new Process { StartInfo = psiLoop };
             pythonLoopProcess.Start();
-
-            Task.Run(() =>
-            {
-                while (!pythonLoopProcess.StandardOutput.EndOfStream)
-                {
-                    string line = pythonLoopProcess.StandardOutput.ReadLine();
-                    if (!isShuttingDown && !richTextBox2.IsDisposed && richTextBox2.IsHandleCreated)
-                    {
-                        this.Invoke((MethodInvoker)(() =>
-                        {
-                            if (!richTextBox2.IsDisposed)
-                            {
-                                richTextBox2.AppendText("[LOOP] " + line + Environment.NewLine);
-                                if (line.Contains("コマンド (/talk テキスト or /once or /exit):") && isAutoOnceEnabled)
-                                {
-                                    pythonLoopProcess.StandardInput.WriteLine("/once");
-                                    pythonLoopProcess.StandardInput.Flush();
-                                    richTextBox2.AppendText("▶ /once を送信しました\n");
-                                }
-                            }
-                        }));
-                    }
-
-                }
-            });
             Task.Run(() =>
             {
                 while (!pythonLoopProcess.StandardOutput.EndOfStream)
                 {
                     string line = pythonLoopProcess.StandardOutput.ReadLine();
 
-                    // 全体ログ表示
                     Invoke((MethodInvoker)(() =>
                     {
-                        AppendLog(richTextBox2, line, isError: false);
-                    }));
+                        AppendLog(richTextBox2, "[LOOP] " + line, isError: false);
 
-                    // 条件マッチ時の自動 /once 実行
-                    if (!isShuttingDown && isAutoOnceEnabled && line.Contains("コマンド (/talk"))
-                    {
-                        Invoke((MethodInvoker)(() =>
+                        if (!isShuttingDown && isAutoOnceEnabled && line.Contains("コマンド (/talk"))
                         {
                             pythonLoopProcess.StandardInput.WriteLine("/once");
                             pythonLoopProcess.StandardInput.Flush();
-                            richTextBox2.AppendText("▶ /once を送信しました\n");
-                        }));
-                    }
+                            AppendLog(richTextBox2, "▶ /once を送信しました\n");
+                        }
+                    }));
                 }
             });
+
 
         }
         private void AppendLog(RichTextBox richTextBox, string text, bool isError = false)
@@ -312,7 +265,7 @@ namespace YunaLauncher
         private void AppendOutput(string line)
         {
             if (!string.IsNullOrWhiteSpace(line))
-                richTextBox1.AppendText(line + Environment.NewLine);  // TextBoxに出力表示
+                AppendLog(richTextBox1, line + Environment.NewLine);  // TextBoxに出力表示
         }
 
 

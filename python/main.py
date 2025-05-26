@@ -9,6 +9,7 @@ import unicodedata
 
 # === Word2Vec モデル読み込み ===
 w2v_model = KeyedVectors.load_word2vec_format("model.vec", binary=False)
+w2v_vocab_set = set(w2v_model.key_to_index)  # ← ここ追加！
 
 # === 意味ネットワーク読み込み ===
 def load_meaning_network(json_path: str) -> nx.Graph:
@@ -63,9 +64,9 @@ def segment_text_by_meaning_network(text: str, graph: nx.Graph, n_min=1, n_max=8
         return ''.join(c for c in text if unicodedata.category(c)[0] != 'C')
 
     log = print  # fallback
-    log("==== Break scores ====")
+    print("==== Break scores ====")
     for i, s in enumerate(break_scores):
-        log(f"{i}: {s:.3f}")
+        print(f"{i}: {s:.3f}")
 
     result = []
     buffer = text[0]
@@ -77,6 +78,22 @@ def segment_text_by_meaning_network(text: str, graph: nx.Graph, n_min=1, n_max=8
             buffer += text[i]
     result.append(buffer)
     return result
+
+
+def segment_with_fallback(text: str, G: nx.Graph) -> list[str]:
+    terms = segment_text_by_meaning_network(text, G)
+
+    resegmented = []
+    for term in terms:
+        if term in G or term in w2v_vocab_set:
+            resegmented.append(term)
+        else:
+            # fallback再分割
+            fallback = segment_text_by_meaning_network(term, G, n_min=1, n_max=4)
+            resegmented.extend(fallback if fallback else [term])  # 最悪そのまま
+
+    return merge_hiragana_chunks(resegmented)
+
 
 # === 類似語処理 ===
 def estimate_similarity_by_unicode(unknown_term, known_terms, topn=5):
@@ -100,32 +117,67 @@ def get_neighbors(term: str, G: nx.Graph) -> dict[str, float]:
     return {n: G[term][n].get("weight", 0.0) for n in G.neighbors(term)} if term in G else {}
 
 def get_w2v_similar_terms(term: str, w2v_model, topn=5) -> dict[str, float]:
+    # ★ 安全確認！語彙にない単語はスキップ
+    if term not in w2v_vocab_set:
+        return {}
+
     try:
         results = w2v_model.most_similar(positive=[term], topn=topn)
         return {w: float(sim) for w, sim in results}
-    except KeyError:
+    except Exception:
         return {}
+
+def should_use_w2v(term: str, G: nx.Graph) -> bool:
+    """
+    グラフ内の関連語数に応じて w2v 使用を決定する関数
+    """
+    neighbor_count = len(list(G.neighbors(term))) if term in G else 0
+
+    if len(G.nodes) < 200:
+        return True  # 初期状態では積極使用
+
+    if neighbor_count <= 1:
+        return True  # ほぼ孤立語 → w2vで補完
+
+    if neighbor_count < 3:
+        return random.random() < 0.5  # 中途半端 → 半分だけ使う
+
+    return False  # 十分な接続があれば不要
 
 def expand_single_term(term: str, G, w2v_model, threshold=0.35, topn=5) -> list[str]:
     neighbors = get_neighbors(term, G)
-    w2v_terms = get_w2v_similar_terms(term, w2v_model, topn)
-    combined = {**neighbors, **w2v_terms}
-    scores = {w: score_term_relation(w, [term], G, w2v_model, threshold, topn) for w in combined if w != term}
+    use_w2v = should_use_w2v(term, G)  # ←ここ！
+
+    combined = dict(neighbors)
+    if use_w2v:
+        w2v_terms = get_w2v_similar_terms(term, w2v_model, topn)
+        combined.update(w2v_terms)
+
+    scores = {
+        w: score_term_relation(w, [term], G, w2v_model, threshold, topn)
+        for w in combined if w != term
+    }
+
     return filter_terms_by_score(scores, base_threshold=threshold)
 
 def expand_term_list(terms: list[str], G, w2v_model, threshold=0.35, topn=5) -> dict[str, list[str]]:
     expanded_terms = {}
+    
     for term in terms:
-        if w2v_model is not None and hasattr(w2v_model, "key_to_index") and term not in w2v_model.key_to_index:
-            # Word2Vec に存在しない場合 → 空で登録 or スキップ
+        if term not in G and term not in w2v_vocab_set:
+            # 両方にない語 → 完全スキップ
             expanded_terms[term] = []
             continue
 
         try:
             expanded_terms[term] = expand_single_term(term, G, w2v_model, threshold, topn)
         except Exception as e:
-            # 想定外のエラー保護
             expanded_terms[term] = []
+
+    # すべて空ならログ出して中断
+    if all(len(v) == 0 for v in expanded_terms.values()):
+        print("[⚠] 全語句の拡張に失敗（意味ネットワーク・W2Vどちらにも存在しない語）")
+    
     return expanded_terms
 
 def score_term_relation(term: str, reference_terms: list[str], G: nx.Graph, w2v_model, base_weight=0.5, topn=5) -> float:
@@ -178,10 +230,10 @@ def merge_hiragana_chunks(chunks: list[str]) -> list[str]:
 # === 実行エントリ ===
 def run_talk_command(text: str, G: nx.Graph, w2v_model, logger=None):
     log = logger.info if logger else print
-    log(f"[入力]: {text}")
-    terms = segment_text_by_meaning_network(text, G)
+    print(f"[入力]: {text}")
+    terms = segment_with_fallback(text, G)
     terms = merge_hiragana_chunks(terms)
-    log(f"[分割語句]: {terms}")
+    print(f"[分割語句]: {terms}")
 
     unknown_terms = [t for t in terms if t not in G]
     if unknown_terms:
@@ -205,11 +257,11 @@ def run_talk_command(text: str, G: nx.Graph, w2v_model, logger=None):
         add_new_nodes_to_graph(term, related, G)
 
     all_terms = list({w for rel in expanded2.values() for w in rel})
-    log(f"生成語句: {all_terms}")
+    print(f"生成語句: {all_terms}")
 
     scores = {term: score_term_relation(term, ["言葉", "話", "言語", "私"], G, w2v_model) for term in all_terms}
     most_important = sorted(scores.items(), key=lambda x: x[1])[0][0] if scores else "不明"
-    log(f"最重要語句: {most_important}")
+    print(f"最重要語句: {most_important}")
 
     filename = text.strip().replace(" ", "_")[:32]
     os.makedirs(f"./memory/{most_important}", exist_ok=True)
@@ -217,7 +269,7 @@ def run_talk_command(text: str, G: nx.Graph, w2v_model, logger=None):
         f.write(f"[関連語]: {' '.join(all_terms)}\n")
 
     save_meaning_network(G)
-    log(f"[OK] 保存完了: {filename}.txt")
+    print(f"[OK] 保存完了: {filename}.txt")
 
 def get_graph_and_model():
     return load_meaning_network("meaning_network.json"), w2v_model
