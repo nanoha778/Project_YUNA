@@ -52,5 +52,4 @@ Project_YUNA/
 ---
 
 ## ライセンス
-
-©️ 2024 Nanoha — All rights reserved.（またはご希望に応じて明記）
+後で書く
