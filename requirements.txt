@@ -1,0 +1,25 @@
+# requirements.txt に書くと便利だよ！
+
+# 🔧 基本ユーティリティ
+python-dotenv          # .envファイル読み込み
+requests               # HTTPリクエスト（API呼び出し）
+tqdm                   # プログレスバー（ループの可視化）
+rich                   # カラー付きログ・デバッグ出力
+loguru                 # ログ出力（標準loggingの高機能版）
+
+# 🧠 自然言語処理・構文処理
+beautifulsoup4         # HTML解析（Weblioなどのスクレイピング）
+lxml                   # 高速なXML/HTMLパーサ（bs4と併用）
+janome                 # 日本語形態素解析（軽量）
+unidic-lite            # MeCab不要で動く分かち書きライブラリ
+
+# 📦 データ構造・JSON処理
+pydantic               # データバリデーションや構造化（任意）
+orjson                 # 高速なJSONエンコーダ（標準jsonより速い）
+
+# 🧪 テスト・検証
+pytest                 # 単体テスト
+pytest-mock            # モックテスト用（任意）
+
+# ⏳ スケジューリング（任意）
+schedule               # 時間指定で定期処理

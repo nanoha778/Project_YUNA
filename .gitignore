@@ -1,11 +1,39 @@
-model.vec
-*.env
-".env"
-/logs/
+# === 🔐 機密情報 ===
+.env
+.env.*
+*.key
+*.pem
+
+# === 🧪 Python キャッシュ / 編集関連 ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.ipynb_checkpoints/
+
+# === 🧠 Project YUNA 専用 ===
+memory/
+dev_logs/
 *.log
-/Runnable/
-*.vec
-/GUIAPP/YunaLauncher/.vs/
-/GUIAPP/YunaLauncher/bin/
-/GUIAPP/YunaLauncher/obj/
-/GUIAPP/YunaLauncher/.vs/
+*.jsonl
+*.tmp
+*.bak
+
+# === 💻 IDE & OSごみ ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# === 📦 仮想環境・ビルド ===
+venv/
+dist/
+build/
+*.egg-info/
+
+# === ✏️ 編集エディタの一時ファイル ===
+*.swp
+*.swo
+*.orig
+*.cache
