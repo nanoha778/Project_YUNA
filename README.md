@@ -24,6 +24,7 @@ Project_YUNA/
 │   ├── main.py
 │   ├── thinking_cell.py
 │   └── modules/
+├── dev_src/             # 開発用のスクリプト群
 ├── knowledge/           # meaning_network.json を格納
 ├── memory/              # 実行中に生成される非言語的記憶
 ├── docs/                # 設計書・仕様書
