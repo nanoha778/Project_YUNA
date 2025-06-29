@@ -9,11 +9,24 @@ import random
 import re
 
 # --- 設定 ---
-model_path = './cc.ja.300.vec'
-output_file = 'assoc_network.json'
-related_words_n = 50
-similarity_threshold = 0.3
+model_path = './cc.ja.300.vec'            # fastText日本語モデル
+output_file = 'assoc_network.json'     # 保存ファイル
+related_words_topn = 20
+merge_factor = 1.05
 sleep_min, sleep_max = 1.0, 2.0
+
+similarity_threshold = 0.4                 # 類似度しきい値
+vocab_limit = 2000                        # 類似語探索語彙の上限数
+
+# --- JSON読み込みで失敗時リトライする関数 ---
+def load_json_with_retry(filepath, retry_interval=1.0):
+    while True:
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            print(f"[WARN] {filepath} の読み込みに失敗しました。{retry_interval}秒後にリトライします。")
+            time.sleep(retry_interval)
 
 print("fastTextモデルをロード中...")
 model = KeyedVectors.load_word2vec_format(model_path, binary=False)
@@ -21,19 +34,15 @@ print("fastTextモデルのロードが完了しました。")
 
 tagger = fugashi.Tagger()
 
-assoc_data = {}
-if os.path.exists(output_file):
-    with open(output_file, 'r', encoding='utf-8') as f:
-        assoc_data = json.load(f)
-    print(f"既存のネットワークデータ（{len(assoc_data)}語）をロードしました。")
-else:
-    print("新規にネットワークデータを作成します。")
+assoc_data = load_json_with_retry(output_file)
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Project YUNA bot)'
 }
 
 def is_valid_definition(text):
+    if len(text) < 1:
+        return False
     if re.fullmatch(r'[\W\d_]+', text):
         return False
     return True
@@ -48,8 +57,7 @@ def get_definitions(word):
         ol_tags = soup.select('ol > li')
         defs = [li.get_text() for li in ol_tags if li.get_text()]
         return [d for d in defs if is_valid_definition(d)]
-    except Exception as e:
-        print(f"[WARN] {word} ページ取得時に例外発生: {e}")
+    except Exception:
         return []
 
 def extract_keywords(text):
@@ -60,62 +68,54 @@ def extract_keywords(text):
             words.append(surface)
     return list(set(words))
 
-def get_random_related_words(word, n=related_words_n, threshold=similarity_threshold):
-    """
-    指定単語に対してコサイン類似度がしきい値以上の単語を全抽出し
-    ランダムにn件ピックアップ。関連度はコサイン値そのまま。
-    """
+def get_related_words(word, topn=related_words_topn):
     try:
-        t0 = time.time()
+        limited_keys = model.index_to_key[:vocab_limit]
         similar = [
             (other, float(model.similarity(word, other)))
-            for other in model.index_to_key if other != word
+            for other in limited_keys if other != word
         ]
-        filtered = [(w, score) for w, score in similar if score >= threshold]
-        t1 = time.time()
+        filtered = [(w, score) for w, score in similar if score >= similarity_threshold]
         if not filtered:
-            print(f"  [INFO] '{word}': 閾値{threshold}以上の関連語は見つかりませんでした。")
             return {}
-        sampled = random.sample(filtered, min(n, len(filtered)))
-        print(f"  [OK] '{word}' 関連語候補:{len(filtered)}件 → サンプル:{len(sampled)}件（計算{t1-t0:.2f}s）")
+        sampled = random.sample(filtered, min(topn, len(filtered)))
         return {w: round(score, 4) for w, score in sampled}
     except KeyError:
-        print(f"  [WARN] '{word}' はモデルに未登録のためスキップ")
         return {}
 
-# --- メイン処理 ---
+def merge_related_words(old, new):
+    merged = old.copy()
+    for k, v in new.items():
+        # ただ単に値を新しいもので上書きするだけ
+        merged[k] = v
+    return merged
+
+
 try:
-    page_count = 0
     while True:
-        page_count += 1
-        print(f"\n== {page_count}ページ目 ==")
         res = requests.get("https://ja.wiktionary.org/wiki/Special:Random", headers=headers, timeout=10)
         word = res.url.rsplit('/', 1)[-1]
-        print(f"[PAGE] {word} 取得中...")
 
         defs = get_definitions(word)
-        print(f"  定義文 {len(defs)}件抽出")
         if not defs:
             continue
 
         for d in defs:
-            keywords = extract_keywords(d)
-            print(f"    意味文から抽出された単語数: {len(keywords)}")
-            for keyword in keywords:
-                assoc = get_random_related_words(keyword)
-                if assoc:
+            for keyword in extract_keywords(d):
+                assoc = get_related_words(keyword)
+                if not assoc:
+                    continue
+                if keyword in assoc_data:
+                    assoc_data[keyword] = merge_related_words(assoc_data[keyword], assoc)
+                else:
                     assoc_data[keyword] = assoc
-                    print(f"    [SAVE] '{keyword}' の関連語ネットワークを追加（全体:{len(assoc_data)}語）")
 
-        # 都度保存
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(assoc_data, f, ensure_ascii=False, indent=2)
-        print(f"[SAVE] ネットワークデータを保存（{len(assoc_data)}語）")
 
         time.sleep(random.uniform(sleep_min, sleep_max))
 
 except KeyboardInterrupt:
-    print("\n[STOP] 強制終了が検知されました。最終保存を実行します。")
+    print("強制終了されました。最終結果を保存します。")
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(assoc_data, f, ensure_ascii=False, indent=2)
-    print(f"[DONE] 終了時点のネットワークデータ（{len(assoc_data)}語）を保存しました。")
